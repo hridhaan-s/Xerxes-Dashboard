@@ -3,7 +3,7 @@
 An experimental, high-precision research assistant powered by local Computer Vision edge pipelines to monitor workspace posture, screen distance, and real-time focus analytics. Built 100% client-side to guarantee data privacy.
 
 **Engine Architect:** HRIDHAAN  
-**Deployment Suite:** [bitbuzz.app/Xerxes](https://bitbuzz.app/Xerxes)
+**Deployment Suite:** [XERXES.BITBUZZ.APP)
 
 
 https://github.com/hridhaan-s/Xerxes-/tree/main 
