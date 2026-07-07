@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XERXES (The Researcher Assistant)</title>
+    <link rel="icon" type="image/x-icon" href="https://cdn.hackclub.com/019f3e1d-71e2-75bc-8fdb-7fe9d7d8680d/image.png">
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=JetBrains+Mono:wght@400&display=swap');
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            background-color: #000000;
+            color: #ffffff;
+        }
+
+        body {
+            display: flex;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            font-family: 'Inter', -apple-system, sans-serif;
+        }
+
+        .app-container {
+            width: 100%;
+            height: 100%;
+            padding: 20px; /* Reduced to maximize viewing area */
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .app-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #111111;
+            padding-bottom: 10px;
+            flex-shrink: 0;
+        }
+
+        .brand-logo {
+            font-weight: 600;
+            letter-spacing: 0.4em;
+            font-size: 13px;
+        }
+
+        .status-text {
+            font-size: 10px;
+            letter-spacing: 0.1em;
+            color: #FFCC00;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .workspace-layout {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 20px;
+            flex-grow: 1;
+            margin-top: 15px;
+            min-height: 0;
+            overflow: hidden; /* Lock viewport overflow elements */
+        }
+
+        .sidebar-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .main-dashboard {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            min-height: 0;
+            overflow-y: auto; /* Allow scrolling inside dashboard column if needed */
+        }
+
+        .metric-card {
+            border: 1px solid #111111;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .metric-card.large { border: 1px solid #ffffff; }
+
+        .extension-warning-box {
+            border: 1px dashed #FF3333;
+            padding: 12px;
+            background: #110000;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: #FF3333;
+            line-height: 1.4;
+        }
+
+        .label {
+            font-size: 9px;
+            letter-spacing: 0.1em;
+            color: #555555;
+            font-family: 'JetBrains Mono', monospace;
+            text-transform: uppercase;
+        }
+
+        .value {
+            font-size: 42px;
+            font-weight: 300;
+            letter-spacing: -0.02em;
+        }
+
+        .value.sub { font-size: 24px; }
+        .unit { font-size: 12px; color: #444444; font-family: 'JetBrains Mono', monospace; }
+
+        .grid-three-col {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+
+        /* Fixed camera block sizing constraint */
+        .preview-container {
+            width: 100%;
+            height: 160px; /* Highly optimized short height to fit any screen resolution */
+            border: 1px solid #222222;
+            position: relative;
+            overflow: hidden;
+            background-color: #050505;
+            display: block !important;
+            margin-top: 5px;
+            flex-shrink: 0;
+        }
+
+        #preview-canvas {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            filter: grayscale(100%) contrast(140%);
+        }
+
+        .panel-box {
+            border: 1px solid #111111;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background: #020202;
+        }
+
+        .tool-display {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 24px;
+            text-align: center;
+            padding-bottom: 4px;
+            border-bottom: 1px dashed #1a1a1a;
+        }
+
+        .tool-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+
+        .tool-btn {
+            padding: 6px;
+            font-size: 9px;
+            letter-spacing: 0.05em;
+            border: 1px solid #222222;
+            cursor: pointer;
+            font-family: 'JetBrains Mono', monospace;
+            background: #000000;
+            color: #ffffff;
+        }
+
+        .tool-input {
+            width: 100%;
+            background: #000000;
+            border: 1px solid #1a1a1a;
+            color: #ffffff;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            padding: 4px;
+            text-align: center;
+        }
+
+        .motivation-banner {
+            border: 1px solid #1a1a1a;
+            padding: 10px 15px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: #888888;
+            background: #040404;
+        }
+
+        .control-panel {
+            display: flex;
+            gap: 12px;
+            margin-top: 10px;
+            flex-shrink: 0;
+        }
+
+        button.main-action {
+            flex: 1;
+            background: #000000;
+            border: 1px solid #ffffff;
+            color: #ffffff;
+            padding: 14px;
+            font-size: 11px;
+            letter-spacing: 0.2em;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: 'JetBrains Mono', monospace;
+            transition: all 0.2s ease;
+        }
+
+        button.main-action:hover:not(:disabled) {
+            background: #ffffff;
+            color: #000000;
+        }
+
+        button.main-action:disabled {
+            border-color: #1a1a1a;
+            color: #333333;
+            cursor: not-allowed;
+        }
+
+        #webcam { display: none; }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <header class="app-header">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <svg width="16" height="16" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="16" cy="16" r="14" stroke="#ffffff" stroke-width="1.5" stroke-dasharray="3 3"/>
+                    <circle cx="16" cy="16" r="5" stroke="#ffffff" stroke-width="1.5"/>
+                </svg>
+                <span class="brand-logo">X E R X E S</span>
+            </div>
+            <span class="status-text" id="status-string">STARTING WEBCAM SYSTEM...</span>
+        </header>
+
+        <div class="workspace-layout">
+            <aside class="sidebar-panel">
+                <div class="extension-warning-box">
+                    <strong>REQUIRED STEP:</strong><br>
+                    Make sure the extension is loaded. Alerts link back to bitbuzz.app/Xerxes.
+                </div>
+
+                <div class="panel-box">
+                    <span class="label">WORK TIMER</span>
+                    <input type="number" class="tool-input" id="timer-input" placeholder="MINUTES" value="25">
+                    <div class="tool-display" id="timer-display">00:00</div>
+                    <div class="tool-controls">
+                        <button class="tool-btn" id="tm-toggle">START</button>
+                        <button class="tool-btn" id="tm-reset">RESET</button>
+                    </div>
+                </div>
+
+                <div class="panel-box">
+                    <span class="label">SYSTEM INFO</span>
+                    <p style="font-size: 10px; font-family: 'JetBrains Mono', monospace; color: #555555;">
+                        RESEARCH BUILD<br>
+                        CREATED BY: <span style="color:#fff;">HRIDHAAN</span>
+                    </p>
+                </div>
+            </aside>
+
+            <main class="main-dashboard">
+                <div class="motivation-banner" id="motivational-hud">
+                    READY // LAUNCH COMPUTE TRACKING MATRIX SESSIONS BELOW.
+                </div>
+
+                <div class="metric-card large">
+                    <span class="label">CURRENT FOCUS PERCENTAGE</span>
+                    <span class="value" id="focus-score">--%</span>
+                </div>
+
+                <div class="grid-three-col">
+                    <div class="metric-card">
+                        <span class="label">SPINE SHAPE POSITION</span>
+                        <span class="value sub" id="spine-angle-val">-- <span class="unit">pts</span></span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="label">DISTANCE FROM SCREEN</span>
+                        <span class="value sub" id="distance-val">-- <span class="unit">cm</span></span>
+                    </div>
+                    <div class="metric-card">
+                        <span class="label">YOUR POSTURE STATUS</span>
+                        <span class="value sub" id="alignment-status">READY</span>
+                    </div>
+                </div>
+
+                <div class="panel-box" style="border: 1px dashed #222222;">
+                    <span class="label" style="color: #444444;">DATA PRIVACY SECURITY VERIFICATION</span>
+                    <p style="font-size: 10px; font-family: 'JetBrains Mono', monospace; color: #555555; line-height: 1.4;">
+                        // processed entirely at edge. data never leaves your pc.
+                    </p>
+                </div>
+
+                <div class="preview-container">
+                    <canvas id="preview-canvas"></canvas>
+                </div>
+            </main>
+        </div>
+
+        <div class="control-panel">
+            <button id="start-btn" class="main-action" style="flex: 2;">START TRACKING</button>
+            <button id="end-btn" class="main-action" disabled>END SESSION</button>
+        </div>
+    </div>
+
+    <video id="webcam" autoplay playsinline></video>
+
+    <script>
+        const videoElement = document.getElementById('webcam');
+        const canvasElement = document.getElementById('preview-canvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        
+        const statusString = document.getElementById('status-string');
+        const alignmentEl = document.getElementById('alignment-status');
+        const focusEl = document.getElementById('focus-score');
+        const spineValEl = document.getElementById('spine-angle-val');
+        const distanceEl = document.getElementById('distance-val');
+        const motivationalHud = document.getElementById('motivational-hud');
+        
+        const startBtn = document.getElementById('start-btn');
+        const endBtn = document.getElementById('end-btn');
+
+        let sessionActive = false;
+        let totalTicks = 0, focusTicks = 0;
+        let strictInfractionTicks = 0;
+
+        let tmInterval = null;
+        let tmSecondsLeft = 0;
+
+        const KNOWN_WIDTH_PX_AT_50CM = 155;
+        const NEUTRAL_SPINE_VAL = 145; 
+        const SPINE_MARGIN_ALLOWED = 30; 
+        const SAFE_EYE_DISTANCE_CM = 40;  
+
+        const boosterPhrases = [
+            "POSTURE LOOKS AMAZING. KEEP CONQUERING THIS SESSION.",
+            "EYES FOCUSED. YOU ARE UNSTOPPABLE TODAY.",
+            "SITTING UP TALL. CHIP AWAY AT YOUR PROJECT PROGRESS.",
+            "PERFECT DISTANCE. YOUR WORK CONCENTRATION MATRIX IS IDEAL."
+        ];
+
+        function playLoudWarningTone(frequency, duration) {
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = "sine";
+                osc.frequency.value = frequency;
+                gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                setTimeout(() => osc.stop(), duration);
+            } catch(e){}
+        }
+
+        document.getElementById('tm-toggle').addEventListener('click', function() {
+            const val = document.getElementById('timer-input').value;
+            if (!tmInterval && val > 0) {
+                this.innerText = 'HALT';
+                if (tmSecondsLeft === 0) tmSecondsLeft = parseInt(val) * 60;
+                tmInterval = setInterval(() => {
+                    if (tmSecondsLeft <= 0) {
+                        clearInterval(tmInterval);
+                        tmInterval = null;
+                        document.getElementById('tm-toggle').innerText = 'START';
+                        playLoudWarningTone(880, 500);
+                        if (sessionActive) {
+                            window.postMessage({ 
+                                type: "XERXES_SIGNAL", 
+                                state: "WARNING", 
+                                msg: "TIMER INTERVAL COMPLETE. TIME FOR A STRETCH BREAK.",
+                                targetUrl: "https://bitbuzz.app/Xerxes" 
+                            }, window.location.origin);
+                        }
+                        return;
+                    }
+                    tmSecondsLeft--;
+                    let m = Math.floor(tmSecondsLeft / 60).toString().padStart(2, '0');
+                    let s = (tmSecondsLeft % 60).toString().padStart(2, '0');
+                    document.getElementById('timer-display').innerText = `${m}:${s}`;
+                }, 1000);
+            } else {
+                this.innerText = 'START';
+                clearInterval(tmInterval);
+                tmInterval = null;
+            }
+        });
+
+        document.getElementById('tm-reset').addEventListener('click', function() {
+            clearInterval(tmInterval);
+            tmInterval = null;
+            tmSecondsLeft = 0;
+            document.getElementById('timer-display').innerText = '00:00';
+            document.getElementById('tm-toggle').innerText = 'START';
+        });
+
+        function onResults(results) {
+            canvasElement.width = videoElement.videoWidth || 640;
+            canvasElement.height = videoElement.videoHeight || 480;
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            
+            if (results.image) {
+                canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+            }
+
+            if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                const landmarks = results.multiFaceLandmarks[0];
+                const forehead = landmarks[10];
+                const chin = landmarks[152];
+                const verticalFaceSpan = Math.abs(forehead.y - chin.y) * canvasElement.height;
+                
+                const eyeLeft = landmarks[33];
+                const eyeRight = landmarks[263];
+                const dx = (eyeLeft.x - eyeRight.x) * canvasElement.width;
+                const dy = (eyeLeft.y - eyeRight.y) * canvasElement.height;
+                const pixelDist = Math.sqrt(dx*dx + dy*dy);
+                const computedDistance = Math.round((KNOWN_WIDTH_PX_AT_50CM * 50) / pixelDist);
+
+                spineValEl.innerHTML = `${Math.round(verticalFaceSpan)} <span class="unit">pts</span>`;
+                distanceEl.innerHTML = `${computedDistance} <span class="unit">cm</span>`;
+
+                canvasCtx.fillStyle = 'rgba(0, 255, 102, 0.6)';
+                canvasCtx.strokeStyle = 'rgba(0, 255, 102, 0.2)';
+                canvasCtx.lineWidth = 0.4;
+
+                for (let i = 0; i < landmarks.length; i++) {
+                    const pt = landmarks[i];
+                    canvasCtx.beginPath();
+                    canvasCtx.arc(pt.x * canvasElement.width, pt.y * canvasElement.height, 0.7, 0, 2 * Math.PI);
+                    canvasCtx.fill();
+
+                    if (i > 0) {
+                        canvasCtx.beginPath();
+                        canvasCtx.moveTo(landmarks[i-1].x * canvasElement.width, landmarks[i-1].y * canvasElement.height);
+                        canvasCtx.lineTo(pt.x * canvasElement.width, pt.y * canvasElement.height);
+                        canvasCtx.stroke();
+                    }
+                }
+
+                if (!sessionActive) return;
+                totalTicks++;
+
+                let badPosture = Math.abs(verticalFaceSpan - NEUTRAL_SPINE_VAL) > SPINE_MARGIN_ALLOWED;
+                let tooClose = computedDistance < SAFE_EYE_DISTANCE_CM;
+                
+                if (badPosture || tooClose) {
+                    let alertString = tooClose ? "TOO CLOSE TO SCREEN // LEAN BACK" : "SLOUCH DETECTED // SIT UP STRAIGHT";
+                    alignmentEl.innerText = tooClose ? "TOO CLOSE" : "SLOUCHING";
+                    alignmentEl.style.color = "#FF3333";
+                    strictInfractionTicks++;
+                    
+                    if (strictInfractionTicks % 2 === 0) {
+                        playLoudWarningTone(380, 150);
+                        motivationalHud.innerText = `WARNING // ${alertString}`;
+                        motivationalHud.style.color = "#FF3333";
+                        window.postMessage({ 
+                            type: "XERXES_SIGNAL", 
+                            state: "WARNING", 
+                            msg: alertString,
+                            targetUrl: "https://bitbuzz.app/Xerxes"
+                        }, window.location.origin);
+                    }
+                } else {
+                    alignmentEl.innerText = "GOOD POSTURE";
+                    alignmentEl.style.color = "#00FF66";
+                    strictInfractionTicks = 0;
+                    focusTicks++;
+                    
+                    if (totalTicks % 15 === 0) {
+                        motivationalHud.innerText = `SYSTEM // ${boosterPhrases[Math.floor(Math.random() * boosterPhrases.length)]}`;
+                        motivationalHud.style.color = "#888888";
+                    }
+                    window.postMessage({ type: "XERXES_SIGNAL", state: "OPTIMAL" }, window.location.origin);
+                }
+
+                focusEl.innerText = `${Math.round((focusTicks / totalTicks) * 100)}%`;
+            } else {
+                if (sessionActive) {
+                    alignmentEl.innerText = "NOT DETECTED";
+                    window.postMessage({ type: "XERXES_SIGNAL", state: "OPTIMAL" }, window.location.origin);
+                }
+            }
+        }
+
+        startBtn.addEventListener('click', () => {
+            sessionActive = true;
+            totalTicks = 0; focusTicks = 0; strictInfractionTicks = 0;
+            motivationalHud.innerText = "SYSTEM ACTIVE // MONITORING POSTURE IN THE BACKGROUND.";
+            startBtn.disabled = true;
+            endBtn.disabled = false;
+        });
+
+        endBtn.addEventListener('click', () => {
+            sessionActive = false;
+            const final = totalTicks > 0 ? Math.round((focusTicks / totalTicks) * 100) : 0;
+            motivationalHud.innerText = `SESSION ENDED // COMPLETED WITH A FOCUS ACCURACY OF ${final}%.`;
+            motivationalHud.style.color = "#ffffff";
+            startBtn.disabled = false;
+            endBtn.disabled = true;
+            window.postMessage({ type: "XERXES_SIGNAL", state: "OPTIMAL" }, window.location.origin);
+        });
+
+        const faceMesh = new FaceMesh({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+        });
+        faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5 });
+        faceMesh.onResults(onResults);
+
+        const camera = new Camera(videoElement, {
+            onFrame: async () => { await faceMesh.send({ image: videoElement }); },
+            width: 640, height: 480
+        });
+        
+        camera.start()
+            .then(() => { statusString.innerText = 'CAMERA ONLINE // INSTANCE SECURE'; })
+            .catch(() => { statusString.innerText = 'ERROR: CAM PROFILE PORT TIMEOUT'; });
+    </script>
+</body>
+</html>
