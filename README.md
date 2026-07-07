@@ -5,6 +5,9 @@ An experimental, high-precision research assistant powered by local Computer Vis
 **Engine Architect:** HRIDHAAN  
 **Deployment Suite:** [bitbuzz.app/Xerxes](https://bitbuzz.app/Xerxes)
 
+
+https://github.com/hridhaan-s/Xerxes-/tree/main 
+THE ABOVE IS THE LINK TO THE REPO OF EXTENSION (this one is to the dashboard - the brain) 
 ---
 
 ## 🚀 Deployment Instructions
