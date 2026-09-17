@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Xerxes — desk posture, measured against your own baseline</title>
+<meta name="description" content="Xerxes watches your desk posture through the webcam, scored against a baseline you set yourself, and shows you when in a session your posture actually gives out. Everything runs in your browser.">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0a0b0d">
+
+<link rel="icon" href="assets/img/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
+
+<meta property="og:title" content="Xerxes — desk posture, measured">
+<meta property="og:description" content="Posture tracking calibrated to you, running entirely in your browser.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="assets/img/icon-256.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="preload" as="fetch" crossorigin href="https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/xerxes.css">
+</head>
+
+<body data-phase="boot" data-state="NOMINAL">
+
+<a class="skip" href="#instrument">Skip to the instrument</a>
+
+<header class="masthead">
+  <div class="identity">
+    <span class="mark" aria-hidden="true"></span>
+    <h1>Xerxes</h1>
+    <p class="tagline">Desk posture, measured against your own baseline</p>
+  </div>
+
+  <div class="signals">
+    <span class="signal" id="bridge" data-status="pending">
+      <span class="bulb" aria-hidden="true"></span>
+      <span id="bridge-label">Looking for the extension…</span>
+    </span>
+    <span class="signal muted" id="rate">foreground · 12 Hz</span>
+  </div>
+</header>
+
+<p class="banner" id="banner" role="status" hidden></p>
+
+<main>
+
+  <!-- ===================================================== live instrument -->
+  <section class="instrument" id="instrument" aria-label="Live posture readout">
+
+    <div class="trace-block">
+      <canvas id="trace" aria-hidden="true"></canvas>
+      <div class="trace-legend">
+        <span>3 minutes ago</span>
+        <span class="band-note">below the dashed line is inside your tolerance</span>
+        <span>now</span>
+      </div>
+    </div>
+
+    <div class="readout">
+      <div class="headline-block">
+        <p class="state-headline" id="state-headline">Not tracking</p>
+        <p class="state-detail" id="state-detail">Calibrate once, then start a session.</p>
+      </div>
+
+      <dl class="figures">
+        <div class="figure primary">
+          <dt>Alignment</dt>
+          <dd><span class="num" id="alignment">—</span><span class="suffix">/100</span></dd>
+        </div>
+        <div class="figure">
+          <dt>Leading fault</dt>
+          <dd><span class="text" id="fault">—</span></dd>
+        </div>
+        <div class="figure">
+          <dt>Deviation</dt>
+          <dd><span class="num small" id="deviation">—</span><span class="suffix">×tolerance</span></dd>
+        </div>
+        <div class="figure">
+          <dt>Screen distance</dt>
+          <dd><span class="num small" id="distance">—</span><span class="suffix">cm</span>
+            <span class="sub" id="distance-delta">as calibrated</span></dd>
+        </div>
+        <div class="figure">
+          <dt>Elapsed</dt>
+          <dd><span class="num small mono" id="elapsed">00:00</span></dd>
+        </div>
+        <div class="figure">
+          <dt>Next break</dt>
+          <dd><span class="num small mono" id="next-break">30:00</span></dd>
+        </div>
+      </dl>
+    </div>
+
+    <aside class="side">
+      <div class="preview-frame">
+        <canvas id="preview" width="320" height="240"></canvas>
+        <p class="preview-note">Only your shoulder line, head position and calibrated ghost are drawn.</p>
+      </div>
+
+      <div class="controls">
+        <button class="btn solid" id="start">Start session</button>
+        <button class="btn" id="end">End session</button>
+        <button class="btn" id="calibrate">Calibrate</button>
+        <button class="btn" id="recalibrate">Recalibrate</button>
+        <button class="btn" id="snooze">Snooze 20 min</button>
+      </div>
+
+      <p class="status" id="status">Loading…</p>
+      <p class="baseline-line">
+        Baseline <span id="baseline-age">not set</span>.
+        <span id="baseline-note" hidden>Older than two weeks — recalibrate if your desk changed.</span>
+      </p>
+    </aside>
+  </section>
+
+  <!-- ======================================================== calibration -->
+  <section class="overlay calibration" aria-live="polite">
+    <div class="overlay-card">
+      <p class="overlay-count" id="calibration-count">6.0</p>
+      <h2>Setting your baseline</h2>
+      <p id="calibration-copy">Sit the way you want to sit for the next hour. Hold still.</p>
+      <div class="cal-bar" id="cal-bar" role="progressbar" aria-label="Calibration progress"><span></span></div>
+      <p class="fine">Everything you are scored on afterwards is a deviation from this position — not from a population average.</p>
+    </div>
+  </section>
+
+  <!-- ============================================================ summary -->
+  <section class="overlay summary" aria-live="polite">
+    <div class="overlay-card wide">
+      <p class="overlay-count" id="summary-score">—</p>
+      <h2>Time in range</h2>
+      <p id="summary-line"></p>
+      <ul class="fault-list" id="summary-faults"></ul>
+      <p class="fine" id="summary-collapse"></p>
+      <button class="btn solid" id="again">Back to the dashboard</button>
+    </div>
+  </section>
+
+  <!-- ============================================================== error -->
+  <section class="overlay error" aria-live="assertive">
+    <div class="overlay-card">
+      <h2>Can't run</h2>
+      <p id="error-copy"></p>
+    </div>
+  </section>
+
+  <!-- ============================================================ history -->
+  <section class="panels">
+
+    <article class="panel">
+      <header>
+        <h2>When your posture gives out</h2>
+        <p>Average deviation against minutes into a session, pooled across <span id="session-count">0</span> stored sessions.</p>
+      </header>
+      <div class="chart" id="collapse-chart"></div>
+      <p class="insight" id="insight-collapse"></p>
+    </article>
+
+    <article class="panel">
+      <header>
+        <h2>Recent sessions</h2>
+        <p>Share of each session spent inside tolerance. Larger dots had alerts.</p>
+      </header>
+      <div class="chart" id="history-chart"></div>
+      <p class="insight" id="insight-fault"></p>
+    </article>
+
+    <article class="panel settings">
+      <header>
+        <h2>Settings</h2>
+        <p>Stored in this browser only.</p>
+      </header>
+
+      <label class="field switch">
+        <input type="checkbox" id="sound">
+        <span>Alert tone</span>
+      </label>
+
+      <label class="field switch">
+        <input type="checkbox" id="preview-toggle">
+        <span>Camera preview</span>
+      </label>
+
+      <label class="field">
+        <span>Break reminder every</span>
+        <span class="input-row"><input type="number" id="work-min" min="5" max="180" step="5"><span class="unit">min</span></span>
+      </label>
+
+      <label class="field">
+        <span>Your eyes-to-screen distance</span>
+        <span class="input-row"><input type="number" id="reference-cm" min="30" max="120" step="5"><span class="unit">cm</span></span>
+      </label>
+      <p class="fine">The distance readout is anchored to this number. Measure it once with a tape and the figure means something; leave it at the default and treat it as relative only.</p>
+
+      <div class="field-actions">
+        <button class="btn" id="export">Export data</button>
+        <button class="btn danger" id="wipe">Delete everything</button>
+      </div>
+    </article>
+
+    <article class="panel about">
+      <header><h2>What this actually measures</h2></header>
+      <p>A webcam sees you from the front. That makes four things genuinely measurable: how high your head sits above your shoulder line, how far it drifts off the midline, how much your head and shoulders roll, and how your distance to the camera changes.</p>
+      <p>It cannot see your lumbar curve or your true cervical angle, so Xerxes does not claim to. The distance figure is anchored to the one measurement you supply; everything else is a ratio against your own shoulder width, which is why it behaves the same on a 480p laptop camera and a 1080p external one.</p>
+      <p>When you turn your head, head metrics are suspended rather than scored — glancing at a second monitor is not a posture fault.</p>
+      <p class="fine">Video frames are processed by WebAssembly in this tab and are never uploaded, recorded or sent anywhere. The pose model is fetched once from a public CDN; after that the page works offline.</p>
+    </article>
+  </section>
+</main>
+
+<footer class="foot">
+  <span>Built by Hridhaan</span>
+  <span><a href="https://github.com/hridhaan-s/Xerxes-Dashboard">Dashboard source</a></span>
+  <span><a href="https://github.com/hridhaan-s/Xerxes-">Extension source</a></span>
+  <span><a href="PRIVACY.md">Privacy</a></span>
+</footer>
+
+<video id="webcam" autoplay playsinline muted aria-hidden="true"></video>
+
+<script type="module" src="assets/js/app.js"></script>
+</body>
+</html>
